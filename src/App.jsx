@@ -1,0 +1,26 @@
+import { Routes, Route, Navigate } from 'react-router-dom'
+import Layout from './components/Layout'
+import WardrobePage from './pages/WardrobePage'
+import UploadPage from './pages/UploadPage'
+import CategoryPage from './pages/CategoryPage'
+import ItemDetailPage from './pages/ItemDetailPage'
+import OutfitPage from './pages/OutfitPage'
+import WeatherPage from './pages/WeatherPage'
+import ShopPage from './pages/ShopPage'
+
+export default function App() {
+  return (
+    <Routes>
+      <Route element={<Layout />}>
+        <Route index element={<WardrobePage />} />
+        <Route path="upload" element={<UploadPage />} />
+        <Route path="category" element={<CategoryPage />} />
+        <Route path="item/:id" element={<ItemDetailPage />} />
+        <Route path="outfit" element={<OutfitPage />} />
+        <Route path="weather" element={<WeatherPage />} />
+        <Route path="shop" element={<ShopPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
+    </Routes>
+  )
+}
