@@ -4,7 +4,8 @@ const TABS = [
   { to: '/', label: '衣橱', icon: '👗', end: true },
   { to: '/outfit', label: '搭配', icon: '✨' },
   { to: '/weather', label: '天气', icon: '🌤️' },
-  { to: '/shop', label: '商城', icon: '🛍️' }
+  { to: '/shop', label: '商城', icon: '🛍️' },
+  { to: '/settings', label: '我的', icon: '👤' }
 ]
 
 export default function Layout() {
@@ -14,7 +15,7 @@ export default function Layout() {
         <Outlet />
       </main>
       <nav className="fixed bottom-0 inset-x-0 z-30 bg-white border-t border-slate-100 max-w-md mx-auto">
-        <div className="grid grid-cols-4">
+        <div className="grid grid-cols-5">
           {TABS.map((t) => (
             <NavLink
               key={t.to}

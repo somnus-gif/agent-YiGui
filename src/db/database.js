@@ -1,9 +1,9 @@
 // IndexedDB 本地数据层(带内存降级方案)
 import { openDB } from 'idb'
-import { DEFAULT_CATEGORIES } from '../utils/constants'
+import { DEFAULT_CATEGORIES } from '../utils/constants.js'
 
 const DB_NAME = 'wardrobe-db'
-const DB_VERSION = 1
+const DB_VERSION = 2 // v2: 新增 deletedAt 索引,支持回收站软删除
 const DB_OPEN_TIMEOUT = 3000
 
 // ========== 内存存储(降级方案) ==========
@@ -41,6 +41,7 @@ class MemoryDB {
   async getAllFromIndex(store, indexName, key) {
     return Array.from(this.stores[store].values()).filter(v => v[indexName] === key)
   }
+  async clear(store) { this.stores[store]?.clear?.() }
   transaction(storeNames, mode) {
     return new MemoryTransaction(this, storeNames)
   }
@@ -88,8 +89,8 @@ async function initDBInternal() {
       throw new Error('浏览器不支持IndexedDB')
     }
     const db = await openDBWithTimeout(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        console.log('[DB] 执行数据库升级/初始化...')
+      upgrade(db, oldVersion, newVersion, tx) {
+        console.log('[DB] 数据库升级:', oldVersion, '→', newVersion)
         if (!db.objectStoreNames.contains('items')) {
           const items = db.createObjectStore('items', { keyPath: 'id' })
           items.createIndex('categoryId', 'categoryId')
@@ -106,7 +107,16 @@ async function initDBInternal() {
         if (!db.objectStoreNames.contains('settings')) {
           db.createObjectStore('settings', { keyPath: 'id' })
         }
-        console.log('[DB] object stores 创建完成')
+        // v1 → v2: 回收站软删除字段索引(旧数据没有该字段,IndexedDB 会自动跳过)
+        if (oldVersion > 0 && oldVersion < 2 && tx) {
+          const ensureIndex = (storeName, indexName) => {
+            const store = tx.objectStore(storeName)
+            if (!store.indexNames.contains(indexName)) store.createIndex(indexName, indexName)
+          }
+          ensureIndex('items', 'deletedAt')
+          ensureIndex('outfits', 'deletedAt')
+        }
+        console.log('[DB] 数据库结构就绪')
       }
     }, DB_OPEN_TIMEOUT)
     console.log('[DB] IndexedDB打开成功!')
@@ -207,4 +217,30 @@ export async function saveSettings(settings) {
   const record = { ...settings, id: 'main' }
   await db.put('settings', record)
   return record
+}
+
+// ============ 批量操作(供导入/清空使用) ============
+export async function putMany(store, records) {
+  const db = await getDB()
+  const now = Date.now()
+  for (const r of records) {
+    await db.put(store, { ...r, updatedAt: r.updatedAt || now, createdAt: r.createdAt || now })
+  }
+  return records.length
+}
+
+export async function clearStore(store) {
+  const db = await getDB()
+  if (useMemoryFallback) {
+    db.stores[store]?.clear?.()
+    return
+  }
+  await db.clear(store)
+}
+
+// 清空全部业务数据(保留分类与设置的初始态由调用方决定)
+export async function clearAllData({ keepCategories = true } = {}) {
+  await clearStore('items')
+  await clearStore('outfits')
+  if (!keepCategories) await clearStore('categories')
 }

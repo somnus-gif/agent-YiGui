@@ -122,7 +122,7 @@ export default function OutfitPage() {
           onClose={() => setConfirmId(null)}
           onConfirm={() => confirmId && removeOutfit(confirmId)}
           title="删除搭配"
-          message={`确定删除「${target?.name}」吗?此操作不影响衣橱里的衣物。`}
+          message={`确定删除「${target?.name}」吗?不影响衣橱里的衣物,可在回收站恢复(保留 30 天)。`}
           confirmText="删除"
         />
       </div>

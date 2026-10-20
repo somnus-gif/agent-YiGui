@@ -8,6 +8,8 @@ import ItemDetailPage from './pages/ItemDetailPage'
 import OutfitPage from './pages/OutfitPage'
 import WeatherPage from './pages/WeatherPage'
 import ShopPage from './pages/ShopPage'
+import SettingsPage from './pages/SettingsPage'
+import TrashPage from './pages/TrashPage'
 
 export default function App() {
   return (
@@ -21,6 +23,8 @@ export default function App() {
         <Route path="outfit" element={<OutfitPage />} />
         <Route path="weather" element={<WeatherPage />} />
         <Route path="shop" element={<ShopPage />} />
+        <Route path="settings" element={<SettingsPage />} />
+        <Route path="trash" element={<TrashPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

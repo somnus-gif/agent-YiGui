@@ -47,9 +47,9 @@ export default function WardrobePage() {
         title="我的衣橱"
         right={
           <button
-            onClick={() => navigate('/category')}
+            onClick={() => navigate('/settings')}
             className="w-9 h-9 flex items-center justify-center text-slate-600 text-lg"
-            aria-label="分类管理"
+            aria-label="设置"
           >
             ⚙️
           </button>

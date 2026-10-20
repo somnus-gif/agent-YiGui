@@ -47,6 +47,13 @@ AI 模型分两档：
 - **天气穿搭**：Open-Meteo 免费 API（无需 Key），按体感温度给穿衣建议 + 7 天预报
 - **商城比价**：淘宝/拼多多/抖音/京东 同关键词一键对比
 
+### 数据安全
+
+- **回收站**：删除衣物/搭配是软删除，在回收站保留 30 天，期间可恢复或彻底删除；过期条目在下次打开应用时自动清理
+- **备份导出**：「我的 → 导出备份」把全部数据（含图片）打包成一个 JSON 文件下载
+- **备份导入**：选择之前导出的 JSON，支持「合并导入」（保留现有，覆盖同 ID）与「覆盖导入」（清空后写入），文件带格式校验
+- **清空数据**：二次确认 + 建议先导出备份
+
 ## 目录结构
 
 ```
@@ -63,9 +70,12 @@ src/
 │  ├─ ItemDetailPage.jsx   衣物详情
 │  ├─ OutfitPage.jsx       搭配
 │  ├─ WeatherPage.jsx      天气穿搭
-│  └─ ShopPage.jsx         商城比价
+│  ├─ ShopPage.jsx         商城比价
+│  ├─ SettingsPage.jsx     我的(统计/备份/清空)
+│  └─ TrashPage.jsx        回收站
 ├─ utils/
 │  ├─ cutoutAI.js          AI 抠图引擎 + alpha 合成
+│  ├─ backup.js            备份导出/导入解析
 │  ├─ weather.js           天气 API 与穿衣建议
 │  └─ constants.js         分类/季节/风格/商城配置
 ├─ db/database.js          IndexedDB 数据层(含内存降级)

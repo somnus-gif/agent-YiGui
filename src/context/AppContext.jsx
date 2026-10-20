@@ -11,40 +11,57 @@ import {
   saveOutfit as dbSaveOutfit,
   deleteOutfit as dbDeleteOutfit,
   getSettings,
-  saveSettings as dbSaveSettings
+  saveSettings as dbSaveSettings,
+  putMany,
+  clearAllData
 } from '../db/database'
 import { uid } from '../utils/constants'
 
 const AppContext = createContext(null)
 
+// 回收站保留时长(毫秒):超过后自动清理,避免图片 base64 长期占空间
+export const TRASH_TTL = 30 * 24 * 60 * 60 * 1000
+
+const isAlive = (x) => !x.deletedAt
+const isTrashed = (x) => !!x.deletedAt
+
 export function AppProvider({ children }) {
   const [ready, setReady] = useState(false)
-  const [items, setItems] = useState([])
+  const [items, setItems] = useState([])         // 仅未删除的衣物
+  const [trash, setTrash] = useState([])         // 回收站(衣物 + 搭配混合)
   const [categories, setCategories] = useState([])
-  const [outfits, setOutfits] = useState([])
+  const [outfits, setOutfits] = useState([])     // 仅未删除的搭配
   const [settings, setSettings] = useState(null)
 
   const [error, setError] = useState(null)
 
   const loadAll = useCallback(async () => {
-    console.log('[AppContext] loadAll 开始，并行加载所有数据...')
     const [it, ca, ou, se] = await Promise.all([
       getAllItems(),
       getAllCategories(),
       getAllOutfits(),
       getSettings()
     ])
-    console.log('[AppContext] 数据加载完成:', {
-      items: it.length,
-      categories: ca.length,
-      outfits: ou.length,
-      hasSettings: !!se
-    })
-    setItems(it)
+    // 自动清理过期回收站条目
+    const now = Date.now()
+    const expired = [...it, ...ou].filter((x) => x.deletedAt && now - x.deletedAt > TRASH_TTL)
+    if (expired.length) {
+      await Promise.all(expired.map((x) =>
+        (it.includes(x) ? dbDeleteItem : dbDeleteOutfit)(x.id)
+      ))
+    }
+    const expiredIds = new Set(expired.map((x) => x.id))
+    const alive = (arr) => arr.filter((x) => !expiredIds.has(x.id))
+
+    setItems(alive(it).filter(isAlive).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)))
+    setOutfits(alive(ou).filter(isAlive).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)))
+    setTrash(
+      alive([...it, ...ou])
+        .filter(isTrashed)
+        .sort((a, b) => (b.deletedAt || 0) - (a.deletedAt || 0))
+    )
     setCategories(ca)
-    setOutfits(ou)
     setSettings(se)
-    console.log('[AppContext] 状态设置完成')
   }, [])
 
   useEffect(() => {
@@ -91,10 +108,14 @@ export function AppProvider({ children }) {
     return record
   }, [])
 
+  // 软删除:移入回收站,可在 30 天内恢复
   const removeItem = useCallback(async (id) => {
-    await dbDeleteItem(id)
+    const target = items.find((x) => x.id === id)
+    if (!target) return
+    const record = await dbSaveItem({ ...target, deletedAt: Date.now() })
     setItems((prev) => prev.filter((x) => x.id !== id))
-  }, [])
+    setTrash((prev) => [record, ...prev.filter((x) => x.id !== id)])
+  }, [items])
 
   // ===== categories =====
   const addCategory = useCallback(async (cat) => {
@@ -128,9 +149,41 @@ export function AppProvider({ children }) {
   }, [])
 
   const removeOutfit = useCallback(async (id) => {
-    await dbDeleteOutfit(id)
+    const target = outfits.find((x) => x.id === id)
+    if (!target) return
+    const record = await dbSaveOutfit({ ...target, deletedAt: Date.now() })
     setOutfits((prev) => prev.filter((x) => x.id !== id))
+    setTrash((prev) => [record, ...prev.filter((x) => x.id !== id)])
+  }, [outfits])
+
+  // ===== 回收站 =====
+  // 判断条目原属哪个 store:搭配有 itemIds 字段,衣物没有
+  const kindOf = (x) => (Array.isArray(x.itemIds) ? 'outfit' : 'item')
+
+  const restore = useCallback(async (id) => {
+    const target = trash.find((x) => x.id === id)
+    if (!target) return
+    const { deletedAt, ...rest } = target
+    if (kindOf(target) === 'outfit') {
+      const record = await dbSaveOutfit(rest)
+      setOutfits((prev) => [record, ...prev.filter((x) => x.id !== id)])
+    } else {
+      const record = await dbSaveItem(rest)
+      setItems((prev) => [record, ...prev.filter((x) => x.id !== id)])
+    }
+    setTrash((prev) => prev.filter((x) => x.id !== id))
+  }, [trash])
+
+  const purge = useCallback(async (id) => {
+    await dbDeleteItem(id)
+    await dbDeleteOutfit(id)
+    setTrash((prev) => prev.filter((x) => x.id !== id))
   }, [])
+
+  const emptyTrash = useCallback(async () => {
+    await Promise.all(trash.map((x) => (kindOf(x) === 'outfit' ? dbDeleteOutfit(x.id) : dbDeleteItem(x.id))))
+    setTrash([])
+  }, [trash])
 
   // ===== settings =====
   const updateSettings = useCallback(async (s) => {
@@ -139,10 +192,47 @@ export function AppProvider({ children }) {
     return record
   }, [])
 
+  // ===== 备份恢复(供设置页调用) =====
+  const exportSnapshot = useCallback(async () => ({
+    items: await getAllItems(),
+    categories: await getAllCategories(),
+    outfits: await getAllOutfits(),
+    settings: (await getSettings()) || null
+  }), [])
+
+  // mode: 'merge' 保留现有数据并补充新条目 | 'replace' 清空后写入
+  const importSnapshot = useCallback(async (data, mode = 'merge') => {
+    if (mode === 'replace') await clearAllData({ keepCategories: false })
+    const stats = { items: 0, categories: 0, outfits: 0 }
+    if (Array.isArray(data.categories) && data.categories.length) {
+      await putMany('categories', data.categories)
+      stats.categories = data.categories.length
+    }
+    if (Array.isArray(data.items) && data.items.length) {
+      await putMany('items', data.items)
+      stats.items = data.items.length
+    }
+    if (Array.isArray(data.outfits) && data.outfits.length) {
+      await putMany('outfits', data.outfits)
+      stats.outfits = data.outfits.length
+    }
+    if (data.settings) await dbSaveSettings(data.settings)
+    await loadAll()
+    return stats
+  }, [loadAll])
+
+  const wipeAll = useCallback(async () => {
+    await clearAllData({ keepCategories: true })
+    setItems([])
+    setOutfits([])
+    setTrash([])
+  }, [])
+
   const value = {
     ready,
     error,
     items,
+    trash,
     categories,
     outfits,
     settings,
@@ -155,7 +245,13 @@ export function AppProvider({ children }) {
     addOutfit,
     updateOutfit,
     removeOutfit,
+    restore,
+    purge,
+    emptyTrash,
     updateSettings,
+    exportSnapshot,
+    importSnapshot,
+    wipeAll,
     reload: loadAll
   }
 

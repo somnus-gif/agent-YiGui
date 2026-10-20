@@ -187,7 +187,7 @@ export default function ItemDetailPage() {
           navigate('/', { replace: true })
         }}
         title="删除衣物"
-        message={`确定删除「${item.name}」吗?此操作不可撤销。`}
+        message={`确定删除「${item.name}」吗?删除后可在「我的 → 回收站」中恢复(保留 30 天)。`}
         confirmText="删除"
       />
     </div>
