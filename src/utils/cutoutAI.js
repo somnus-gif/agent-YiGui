@@ -59,7 +59,11 @@ export async function aiCutout(src, opts = {}) {
   onProgress?.('准备图片…', 0)
   const blob = await toBlob(src)
 
-  const { default: removeBackground } = await loadModule()
+  // 该包只有命名导出(export { removeBackground, ... }),没有 default
+  const { removeBackground } = await loadModule()
+  if (typeof removeBackground !== 'function') {
+    throw new Error('AI 抠图模块加载异常:removeBackground 不可用')
+  }
 
   onProgress?.('加载内置 AI 模型…', 0)
 
@@ -67,7 +71,7 @@ export async function aiCutout(src, opts = {}) {
     publicPath: DEFAULT_PUBLIC_PATH,
     device: useGpu ? 'gpu' : 'cpu',
     model: preset.id,
-    output: { format: 'image/png', type: 'foreground' },
+    output: { format: 'image/png' },
     progress: (key, current, total) => {
       if (!total) return
       const ratio = Math.min(0.99, current / total)
