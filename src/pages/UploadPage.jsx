@@ -180,20 +180,28 @@ export default function UploadPage() {
             <p className="text-slate-700 font-medium mb-1">上传一张衣物照片</p>
             <p className="text-xs text-slate-400 mb-5 text-center px-4 leading-relaxed">
               支持 JPG / PNG / WebP，点击下方按钮从相册/相机选图<br />
-              上传后 AI 将自动识别衣服主体并去除背景<br />
-              可通过「🖌 加选」「🧽 减选」画笔手动微调边缘
+              上传后自动启用 <strong className="text-blue-600">AI 抠图</strong>（发丝级边缘，本地运行不上传服务器）<br />
+              也可切「⚡ 快速去背」离线处理，或一次上传多张走批量
             </p>
 
-            <label className="relative inline-flex items-center justify-center h-12 px-8 rounded-2xl bg-brand-500 text-white font-medium shadow-lg shadow-brand-500/30 active:scale-95 transition select-none cursor-pointer">
-              <span className="pointer-events-none">📁 选择图片</span>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                onChange={onPickFile}
-              />
-            </label>
+            <div className="flex flex-col items-center gap-3 w-full">
+              <label className="relative inline-flex items-center justify-center h-12 px-8 rounded-2xl bg-brand-500 text-white font-medium shadow-lg shadow-brand-500/30 active:scale-95 transition select-none cursor-pointer">
+                <span className="pointer-events-none">📁 选择单张图片</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  onChange={onPickFile}
+                />
+              </label>
+              <button
+                onClick={() => navigate('/batch')}
+                className="h-11 px-6 rounded-2xl bg-white border border-slate-200 text-slate-600 text-sm font-medium active:bg-slate-50 transition"
+              >
+                📦 批量上传多张
+              </button>
+            </div>
 
             {error && <p className="text-rose-500 text-sm mt-3 text-center px-4">{error}</p>}
           </div>

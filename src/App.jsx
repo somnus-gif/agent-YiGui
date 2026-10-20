@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/Layout'
 import WardrobePage from './pages/WardrobePage'
 import UploadPage from './pages/UploadPage'
+import BatchUploadPage from './pages/BatchUploadPage'
 import CategoryPage from './pages/CategoryPage'
 import ItemDetailPage from './pages/ItemDetailPage'
 import OutfitPage from './pages/OutfitPage'
@@ -14,6 +15,7 @@ export default function App() {
       <Route element={<Layout />}>
         <Route index element={<WardrobePage />} />
         <Route path="upload" element={<UploadPage />} />
+        <Route path="batch" element={<BatchUploadPage />} />
         <Route path="category" element={<CategoryPage />} />
         <Route path="item/:id" element={<ItemDetailPage />} />
         <Route path="outfit" element={<OutfitPage />} />

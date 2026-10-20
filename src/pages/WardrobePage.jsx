@@ -13,6 +13,7 @@ export default function WardrobePage() {
   const [season, setSeason] = useState('all')
   const [style, setStyle] = useState('all')
   const [showFilter, setShowFilter] = useState(false)
+  const [addMenuOpen, setAddMenuOpen] = useState(false)
 
   const filtered = useMemo(() => {
     return items
@@ -153,12 +154,45 @@ export default function WardrobePage() {
         )}
       </div>
 
+      {/* 添加衣物:支持单张(抠图微调)与批量(AI 自动抠图) */}
+      {addMenuOpen && (
+        <div className="fixed inset-0 z-40" onClick={() => setAddMenuOpen(false)}>
+          <div className="absolute inset-0 bg-black/30" />
+          <div
+            className="absolute right-4 bottom-36 w-56 bg-white rounded-2xl shadow-xl overflow-hidden page-enter"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => { setAddMenuOpen(false); navigate('/upload') }}
+              className="w-full px-4 py-3.5 flex items-center gap-3 active:bg-slate-50 text-left"
+            >
+              <span className="text-2xl">✂️</span>
+              <div>
+                <p className="text-sm font-medium text-slate-800">单张添加</p>
+                <p className="text-xs text-slate-400">抠图后可手动微调边缘</p>
+              </div>
+            </button>
+            <div className="h-px bg-slate-100 mx-4" />
+            <button
+              onClick={() => { setAddMenuOpen(false); navigate('/batch') }}
+              className="w-full px-4 py-3.5 flex items-center gap-3 active:bg-slate-50 text-left"
+            >
+              <span className="text-2xl">📦</span>
+              <div>
+                <p className="text-sm font-medium text-slate-800">批量添加</p>
+                <p className="text-xs text-slate-400">最多 20 张,AI 自动抠图</p>
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
+
       <button
-        onClick={() => navigate('/upload')}
-        className="fixed right-4 bottom-20 w-14 h-14 rounded-full bg-brand-500 text-white text-3xl shadow-lg shadow-brand-500/30 active:scale-90 transition flex items-center justify-center z-20"
+        onClick={() => setAddMenuOpen((v) => !v)}
+        className="fixed right-4 bottom-20 w-14 h-14 rounded-full bg-brand-500 text-white text-3xl shadow-lg shadow-brand-500/30 active:scale-90 transition flex items-center justify-center z-50"
         aria-label="添加衣物"
       >
-        ＋
+        {addMenuOpen ? '✕' : '＋'}
       </button>
     </div>
   )
