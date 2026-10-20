@@ -2,18 +2,25 @@
 // 基于 @imgly/background-removal(ISNet ONNX 模型)+ onnxruntime-web
 //
 // 设计要点:
-//  1. 首次调用会下载模型(small ≈43MB / medium ≈88MB),之后由浏览器 + IndexedDB 缓存,秒开
+//  1. 模型已内置在 public/ai-cutout/(约 43MB),首次加载从本站读取并由浏览器缓存,之后秒开
 //  2. 模型按最长边缩放到 1024 内推理,输出的是 0~255 的软 alpha(发丝/毛边自然过渡)
 //  3. 提供进度回调,便于 UI 显示「下载模型 / 推理中」阶段
 //  4. 任何失败都向上抛出,由调用方降级到纯本地算法,保证功能不中断
 
-// 必须与 @imgly/background-removal 的 JS 包版本一致(1.7.0),否则 CDN 上找不到对应模型分片
-const DEFAULT_PUBLIC_PATH = 'https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/'
+// 模型与 onnxruntime wasm 已随应用打包到 public/ai-cutout/(isnet_quint8 量化模型,约 43MB),
+// 首次加载从本站读取,不依赖任何外部 CDN——离线、内网、弱网环境都能用。
+// 若以后需要换 CDN,把该值改为 'https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/'
+// (注意:版本号必须与 @imgly/background-removal 的 JS 包版本一致,否则找不到对应模型分片)
+// 库内部用 new URL('resources.json', publicPath) 拼接地址,base 必须是绝对 URL
+const DEFAULT_PUBLIC_PATH =
+  typeof location !== 'undefined'
+    ? new URL('/ai-cutout/', location.origin).href
+    : '/ai-cutout/'
 
-// 模型档位:小模型快(43MB),中模型边缘更干净(88MB)
+// 模型档位:当前仅内置 isnet_quint8(本地量化模型)。官方还有 isnet_fp16(88MB)/isnet(168MB),
+// 体积太大不适合随应用分发;量化模型对衣物、人像主体的边缘质量已经足够。
 export const MODEL_PRESETS = {
-  small: { id: 'isnet_quint8', label: '快速', size: '约 43MB', desc: '速度快,适合大多数纯色/浅色背景' },
-  medium: { id: 'isnet_fp16', label: '精细', size: '约 88MB', desc: '边缘更干净,适合发丝、毛绒、半透明材质' }
+  small: { id: 'isnet_quint8', label: '本地模型', size: '', desc: '内置 AI 模型,无需联网下载' }
 }
 
 let modulePromise = null
@@ -54,10 +61,7 @@ export async function aiCutout(src, opts = {}) {
 
   const { default: removeBackground } = await loadModule()
 
-  onProgress?.(
-    `加载 AI 模型(${preset.label}${preset.size ? ' · ' + preset.size : ''})…首次使用需下载`,
-    0
-  )
+  onProgress?.('加载内置 AI 模型…', 0)
 
   const outBlob = await removeBackground(blob, {
     publicPath: DEFAULT_PUBLIC_PATH,
@@ -69,7 +73,7 @@ export async function aiCutout(src, opts = {}) {
       const ratio = Math.min(0.99, current / total)
       // key 形如 "fetch:/models/small" 或 "compute:inference"
       if (key.startsWith('fetch')) {
-        onProgress?.(`下载模型资源 ${Math.round(ratio * 100)}%`, ratio)
+        onProgress?.(`加载模型资源 ${Math.round(ratio * 100)}%`, ratio)
       } else {
         onProgress?.('AI 推理中…', ratio)
       }

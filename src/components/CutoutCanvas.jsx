@@ -10,7 +10,7 @@ const AUTO_TOLERANCE = 28 // 本地兜底算法:auto 模式使用固定容差
  *
  *  引擎 A「AI 抠图」: @imgly/background-removal(ISNet ONNX,浏览器本地推理)
  *    - 输出 0~255 软 alpha,发丝/毛绒/半透明边缘自然过渡
- *    - 首次需下载模型(small≈43MB / medium≈88MB),之后浏览器缓存秒开
+ *    - 模型内置于 public/ai-cutout/(isnet_quint8 ≈43MB),本站加载、离线可用
  *    - 失败自动降级到引擎 B,不影响使用
  *
  *  引擎 B「快速去背」: 纯本地 flood fill(原实现)
@@ -157,8 +157,7 @@ export default function CutoutCanvas({ imageSrc, onDone, onCancel }) {
   const [canUndo, setCanUndo] = useState(false)
   const [canRedo, setCanRedo] = useState(false)
   const [engine, setEngine] = useState('ai')
-  const [modelSize, setModelSize] = useState('small')
-  const [showModelMenu, setShowModelMenu] = useState(false)
+  const [modelSize] = useState('small') // 目前仅内置一个模型档位
   const [edgeFeather, setEdgeFeather] = useState(true)
 
   // ---- 渲染 ----
@@ -336,6 +335,8 @@ export default function CutoutCanvas({ imageSrc, onDone, onCancel }) {
       if (token !== aiTokenRef.current) return
       console.warn('[Cutout] AI 抠图失败,降级到本地算法:', e)
       runLocal()
+      // runLocal 会覆盖提示,所以警告放在它之后
+      setHint(`⚠️ AI 抠图失败(${(e && e.message) || '未知错误'}),已临时切换快速去背,点「✨ AI 抠图」可重试`)
     } finally {
       if (token === aiTokenRef.current) {
         setAiThinking(false)
@@ -641,35 +642,7 @@ export default function CutoutCanvas({ imageSrc, onDone, onCancel }) {
           ⚡ 快速去背
         </button>
         <div className="flex-1" />
-        <div className="relative">
-          <button
-            onClick={() => setShowModelMenu((v) => !v)}
-            disabled={loading || aiThinking}
-            className="h-8 px-2.5 rounded-full bg-white border border-slate-200 text-xs text-slate-600 flex items-center gap-1 disabled:opacity-40"
-          >
-            {MODEL_PRESETS[modelSize].label} ▾
-          </button>
-          {showModelMenu && (
-            <div className="absolute right-0 top-9 z-40 w-52 bg-white rounded-xl shadow-lg border border-slate-100 p-1.5">
-              {Object.entries(MODEL_PRESETS).map(([key, p]) => (
-                <button
-                  key={key}
-                  onClick={() => {
-                    setModelSize(key)
-                    setShowModelMenu(false)
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-xs ${
-                    modelSize === key ? 'bg-blue-50 text-blue-700' : 'text-slate-600 active:bg-slate-50'
-                  }`}
-                >
-                  <span className="font-medium">{p.label}</span>
-                  {p.size && <span className="text-slate-400 ml-1">{p.size}</span>}
-                  <p className="text-slate-400 mt-0.5 leading-snug">{p.desc}</p>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <span className="text-[10px] text-slate-400 shrink-0">内置模型 · 离线可用</span>
       </div>
 
       <div className="flex items-center justify-between px-1 pb-2">

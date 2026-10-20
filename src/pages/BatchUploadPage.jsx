@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import TopBar from '../components/TopBar'
-import { aiCutout, MODEL_PRESETS } from '../utils/cutoutAI'
+import { aiCutout } from '../utils/cutoutAI'
 import { SEASONS, STYLES } from '../utils/constants'
 
 /**
@@ -210,23 +210,9 @@ export default function BatchUploadPage() {
               </button>
             </div>
             {useAI && (
-              <div>
-                <label className="label">模型档位</label>
-                <div className="flex gap-2">
-                  {Object.entries(MODEL_PRESETS).map(([key, p]) => (
-                    <button
-                      key={key}
-                      onClick={() => setModelSize(key)}
-                      className={`flex-1 py-2 px-3 rounded-xl text-xs border transition ${
-                        modelSize === key ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-slate-200 text-slate-600'
-                      }`}
-                    >
-                      <p className="font-medium">{p.label}</p>
-                      <p className="text-slate-400 mt-0.5">{p.size}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                使用内置 AI 模型(isnet_quint8),从本站加载、无需联网下载,离线可用
+              </p>
             )}
           </div>
         </div>
@@ -250,7 +236,7 @@ export default function BatchUploadPage() {
           </div>
           <p className="text-slate-400 text-xs mt-2">{progress.done} / {progress.total}</p>
           <p className="text-slate-400 text-xs mt-6 text-center px-6 leading-relaxed">
-            首次使用需下载 AI 模型(约 {MODEL_PRESETS[modelSize].size}),之后每张秒级完成<br />
+            首次使用需加载内置 AI 模型(约 43MB),之后每张秒级完成<br />
             请勿关闭页面
           </p>
           <div className="w-full mt-8 space-y-2 max-h-[40vh] overflow-y-auto">
