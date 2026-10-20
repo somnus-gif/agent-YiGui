@@ -40,6 +40,7 @@ AI 模型（isnet_quint8，约 43MB）与 onnxruntime WASM **已内置在 `publi
 - **分类管理**：预设 10 类 + 自定义分类，支持子分类
 - **搭配**：挑选衣物组合成套装，标注季节与场合
 - **天气穿搭**：Open-Meteo 免费 API（无需 Key），按体感温度给穿衣建议 + 7 天预报
+- **今日穿搭推荐**：结合体感温度/季节/风格，从衣橱自动生成 3 套今日 OOTD（含套装方案），附推荐理由与衣橱缺口提示，一键保存为搭配
 - **商城比价**：淘宝/拼多多/抖音/京东 同关键词一键对比
 
 ### 数据安全
@@ -72,6 +73,7 @@ src/
 │  ├─ cutoutAI.js          AI 抠图引擎 + alpha 合成
 │  ├─ backup.js            备份导出/导入解析
 │  ├─ weather.js           天气 API 与穿衣建议
+│  └─ outfitRecommender.js 今日穿搭推荐引擎(温度分层/季节过滤/风格一致/缺口分析)
 │  └─ constants.js         分类/季节/风格/商城配置
 ├─ db/database.js          IndexedDB 数据层(含内存降级)
 └─ context/AppContext.jsx  全局状态

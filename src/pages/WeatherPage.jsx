@@ -1,16 +1,22 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import TopBar from '../components/TopBar'
 import EmptyState from '../components/EmptyState'
 import { geocode, fetchWeather, describeWeather, clothingSuggestion } from '../utils/weather'
+import { recommendOutfits } from '../utils/outfitRecommender'
 
 export default function WeatherPage() {
-  const { settings, updateSettings } = useApp()
+  const { settings, updateSettings, items, addOutfit } = useApp()
+  const navigate = useNavigate()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState('')
   const [city, setCity] = useState('')
   const [locOpen, setLocOpen] = useState(false)
+  const [rec, setRec] = useState(null)
+  const [recVariant, setRecVariant] = useState(0)
+  const [savedIds, setSavedIds] = useState([])
 
   const loc = settings?.weatherLocation
 
@@ -74,6 +80,34 @@ export default function WeatherPage() {
   const daily = data?.daily
   const desc = cur ? describeWeather(cur.weather_code) : null
 
+  const itemById = (id) => items.find((i) => i.id === id)
+
+  const generate = () => {
+    if (!cur) return
+    const variant = recVariant + 1
+    setRecVariant(variant)
+    const r = recommendOutfits(items, {
+      apparentTemp: cur.apparent_temperature,
+      weatherCode: cur.weather_code,
+      variant
+    })
+    setRec(r)
+    setSavedIds([])
+  }
+
+  const saveOutfit = async (o) => {
+    const d = new Date()
+    const label = `${d.getMonth() + 1}月${d.getDate()}日`
+    await addOutfit({
+      name: `今日OOTD · ${label}`,
+      itemIds: o.itemIds,
+      season: rec.season,
+      occasion: '日常',
+      notes: o.reasons.join(';')
+    })
+    setSavedIds((s) => [...s, o.name + o.itemIds.join(',')])
+  }
+
   return (
     <div className="page-enter">
       <TopBar
@@ -115,6 +149,92 @@ export default function WeatherPage() {
             <div className="mt-3 px-3 py-2 rounded-xl bg-brand-50 text-brand-700 text-sm">
               {clothingSuggestion(cur.apparent_temperature)}
             </div>
+          </div>
+        )}
+
+        {cur && desc && (
+          <div className="card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-sm font-medium text-slate-700">✨ 今日穿搭推荐</p>
+                <p className="text-xs text-slate-400 mt-0.5">结合 {rec ? rec.tier.tier : '当前'}天气与你的衣橱</p>
+              </div>
+              <button onClick={generate} className="btn-primary py-2 px-4 text-xs">
+                {rec ? '换一批' : '生成 OOTD'}
+              </button>
+            </div>
+
+            {!rec && items.length === 0 && (
+              <p className="text-xs text-slate-400 leading-relaxed">
+                衣橱还是空的,先去添加几件衣物,才能为你生成今日穿搭
+              </p>
+            )}
+            {!rec && items.length > 0 && (
+              <p className="text-xs text-slate-400 leading-relaxed">
+                点击「生成 OOTD」,从你的衣橱里挑出 3 套适合今天天气的搭配
+              </p>
+            )}
+
+            {rec && rec.outfits.length === 0 && (
+              <p className="text-xs text-rose-500">
+                没找到适合 {rec.season}季/{rec.tier.tier}天气的衣物,快去补充衣橱吧
+              </p>
+            )}
+
+            {rec && rec.missing.length > 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 text-amber-700 text-xs mb-3">
+                <span>衣橱缺口:{rec.missing.join('、')}</span>
+                <button onClick={() => navigate('/shop')} className="ml-auto underline shrink-0">去补货</button>
+              </div>
+            )}
+
+            {rec && rec.outfits.length > 0 && (
+              <div className="space-y-3">
+                {rec.outfits.map((o, idx) => {
+                  const key = o.name + o.itemIds.join(',')
+                  const saved = savedIds.includes(key)
+                  const its = o.itemIds.map(itemById).filter(Boolean)
+                  return (
+                    <div key={idx} className="rounded-2xl border border-slate-100 p-3 bg-slate-50/50">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-500 to-violet-500 text-white text-[10px] flex items-center justify-center font-bold shrink-0">
+                          {idx + 1}
+                        </span>
+                        <p className="text-xs font-medium text-slate-700 truncate flex-1">{o.name}</p>
+                        <span className="chip bg-slate-200/70 text-slate-500 shrink-0">{o.count}件</span>
+                      </div>
+                      <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                        {its.map((it) => (
+                          <button
+                            key={it.id}
+                            onClick={() => navigate(`/item/${it.id}`)}
+                            className="shrink-0 w-14 h-14 bg-white rounded-lg overflow-hidden flex items-center justify-center border border-slate-100"
+                          >
+                            <img src={it.image} alt={it.name} className="max-w-full max-h-full object-contain p-0.5" />
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {o.reasons.map((r, i) => (
+                          <span key={i} className="chip bg-blue-50 text-blue-600">{r}</span>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => !saved && saveOutfit(o)}
+                        disabled={saved}
+                        className={`w-full mt-2.5 py-2 rounded-xl text-xs font-medium transition ${
+                          saved
+                            ? 'bg-emerald-100 text-emerald-600'
+                            : 'bg-brand-500 text-white active:scale-[0.98]'
+                        }`}
+                      >
+                        {saved ? '✓ 已保存到我的搭配' : '保存为搭配'}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
 
