@@ -82,7 +82,15 @@ export default function ItemDetailPage() {
 
         {/* 商城搜索 */}
         <div className="card p-4">
-          <p className="text-xs text-slate-400 mb-2">去商城找同款</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-slate-400">去商城找同款</p>
+            <button
+              onClick={() => navigate(`/shop?q=${encodeURIComponent(item.name)}`)}
+              className="text-xs text-teal-600 font-medium"
+            >
+              ⚖️ 全网比价 →
+            </button>
+          </div>
           <div className="grid grid-cols-4 gap-2">
             {SHOPS.map((s) => {
               const url = s.searchUrl(item.name)
@@ -108,6 +116,15 @@ export default function ItemDetailPage() {
               )
             })}
           </div>
+          <a
+            href={`https://s.manmanbuy.com/pc/search/result?keyword=${encodeURIComponent(item.name)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-white text-xs font-medium active:scale-[0.98] transition"
+            style={{ backgroundImage: 'linear-gradient(135deg,#0d9488,#14b8a6)' }}
+          >
+            📊 慢慢买 · 全网报价对比 ↗
+          </a>
         </div>
 
         <button
