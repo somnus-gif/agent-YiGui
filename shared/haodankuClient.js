@@ -129,13 +129,13 @@ export const PLATFORM_GUIDE = {
   pdd: {
     name: '拼多多',
     status: 'need-auth',
-    tip: '需在好单库后台绑定「多多进宝」推广账号',
+    tip: '去多多进宝(jinbao.pinduoduo.com)建推广位拿 PID,再回好单库授权页绑定',
     fix: `${AUTH_CENTER}?platform=3`
   },
   jd: {
     name: '京东',
     status: 'need-auth',
-    tip: '需在好单库后台绑定「京东联盟」推广账号',
+    tip: '去京东联盟(union.jd.com)拿联盟ID + 授权Key,再回好单库授权页绑定',
     fix: AUTH_CENTER
   },
   douyin: {
