@@ -65,6 +65,8 @@ export function parseBackupFile(file) {
         if (!Array.isArray(data.items) && !Array.isArray(data.outfits) && !Array.isArray(data.categories)) {
           throw new Error('备份文件里没有衣物/搭配/分类数据')
         }
+        // wearLogs 为 v3 新增,旧备份可能没有,兼容处理
+        if (!Array.isArray(data.wearLogs)) data.wearLogs = []
         resolve(data)
       } catch (e) {
         reject(new Error(e && e.message && !/empty|JSON/i.test(e.message) ? e.message : '文件解析失败,内容不是合法 JSON'))

@@ -46,13 +46,22 @@ export default function WardrobePage() {
       <TopBar
         title="我的衣橱"
         right={
-          <button
-            onClick={() => navigate('/settings')}
-            className="w-9 h-9 flex items-center justify-center text-slate-600 text-lg"
-            aria-label="设置"
-          >
-            ⚙️
-          </button>
+          <div className="flex items-center">
+            <button
+              onClick={() => navigate('/stats')}
+              className="w-9 h-9 flex items-center justify-center text-slate-600 text-lg"
+              aria-label="统计与日历"
+            >
+              📊
+            </button>
+            <button
+              onClick={() => navigate('/settings')}
+              className="w-9 h-9 flex items-center justify-center text-slate-600 text-lg"
+              aria-label="设置"
+            >
+              ⚙️
+            </button>
+          </div>
         }
       />
 

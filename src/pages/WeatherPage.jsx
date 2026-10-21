@@ -7,7 +7,7 @@ import { geocode, fetchWeather, describeWeather, clothingSuggestion } from '../u
 import { recommendOutfits } from '../utils/outfitRecommender'
 
 export default function WeatherPage() {
-  const { settings, updateSettings, items, addOutfit } = useApp()
+  const { settings, updateSettings, items, addOutfit, logWear } = useApp()
   const navigate = useNavigate()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -105,6 +105,8 @@ export default function WeatherPage() {
       occasion: '日常',
       notes: o.reasons.join(';')
     })
+    // 同时记录今天的穿着,统计页与日历自动同步
+    await logWear({ itemIds: o.itemIds, note: '今日OOTD' })
     setSavedIds((s) => [...s, o.name + o.itemIds.join(',')])
   }
 

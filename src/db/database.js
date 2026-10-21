@@ -3,7 +3,7 @@ import { openDB } from 'idb'
 import { DEFAULT_CATEGORIES } from '../utils/constants.js'
 
 const DB_NAME = 'wardrobe-db'
-const DB_VERSION = 2 // v2: 新增 deletedAt 索引,支持回收站软删除
+const DB_VERSION = 3 // v2: deletedAt 索引(回收站); v3: wearLogs 穿着记录
 const DB_OPEN_TIMEOUT = 3000
 
 // ========== 内存存储(降级方案) ==========
@@ -30,7 +30,8 @@ class MemoryDB {
       items: new Map(),
       categories: new Map(),
       outfits: new Map(),
-      settings: new Map()
+      settings: new Map(),
+      wearLogs: new Map()
     }
     console.warn('[MemoryDB] 使用内存存储模式(数据不会持久化)')
   }
@@ -106,6 +107,11 @@ async function initDBInternal() {
         }
         if (!db.objectStoreNames.contains('settings')) {
           db.createObjectStore('settings', { keyPath: 'id' })
+        }
+        // v2 → v3: 穿着记录(一天可多条,如分早晚)
+        if (!db.objectStoreNames.contains('wearLogs')) {
+          const wearLogs = db.createObjectStore('wearLogs', { keyPath: 'id' })
+          wearLogs.createIndex('date', 'date')
         }
         // v1 → v2: 回收站软删除字段索引(旧数据没有该字段,IndexedDB 会自动跳过)
         if (oldVersion > 0 && oldVersion < 2 && tx) {
@@ -210,6 +216,17 @@ export async function saveOutfit(outfit) {
 }
 export async function deleteOutfit(id) { return (await getDB()).delete('outfits', id) }
 
+// ============ wearLogs(穿着记录) ============
+export async function getAllWearLogs() { return (await getDB()).getAll('wearLogs') }
+export async function saveWearLog(log) {
+  const db = await getDB()
+  const now = Date.now()
+  const record = { ...log, updatedAt: now, createdAt: log.createdAt || now }
+  await db.put('wearLogs', record)
+  return record
+}
+export async function deleteWearLog(id) { return (await getDB()).delete('wearLogs', id) }
+
 // ============ settings ============
 export async function getSettings() { return (await getDB()).get('settings', 'main') }
 export async function saveSettings(settings) {
@@ -242,5 +259,6 @@ export async function clearStore(store) {
 export async function clearAllData({ keepCategories = true } = {}) {
   await clearStore('items')
   await clearStore('outfits')
+  await clearStore('wearLogs')
   if (!keepCategories) await clearStore('categories')
 }

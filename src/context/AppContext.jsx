@@ -12,6 +12,9 @@ import {
   deleteOutfit as dbDeleteOutfit,
   getSettings,
   saveSettings as dbSaveSettings,
+  getAllWearLogs,
+  saveWearLog as dbSaveWearLog,
+  deleteWearLog as dbDeleteWearLog,
   putMany,
   clearAllData
 } from '../db/database'
@@ -31,16 +34,18 @@ export function AppProvider({ children }) {
   const [trash, setTrash] = useState([])         // 回收站(衣物 + 搭配混合)
   const [categories, setCategories] = useState([])
   const [outfits, setOutfits] = useState([])     // 仅未删除的搭配
+  const [wearLogs, setWearLogs] = useState([])   // 穿着记录
   const [settings, setSettings] = useState(null)
 
   const [error, setError] = useState(null)
 
   const loadAll = useCallback(async () => {
-    const [it, ca, ou, se] = await Promise.all([
+    const [it, ca, ou, se, wl] = await Promise.all([
       getAllItems(),
       getAllCategories(),
       getAllOutfits(),
-      getSettings()
+      getSettings(),
+      getAllWearLogs()
     ])
     // 自动清理过期回收站条目
     const now = Date.now()
@@ -62,6 +67,7 @@ export function AppProvider({ children }) {
     )
     setCategories(ca)
     setSettings(se)
+    setWearLogs(wl.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0)))
   }, [])
 
   useEffect(() => {
@@ -185,6 +191,26 @@ export function AppProvider({ children }) {
     setTrash([])
   }, [trash])
 
+  // ===== wearLogs(穿着记录) =====
+  // date 格式:YYYY-MM-DD(本地时区);一天可多条记录(如换装),重复记录同一天的相同衣物会合并去重
+  const logWear = useCallback(async ({ itemIds, date, note }) => {
+    if (!Array.isArray(itemIds) || itemIds.length === 0) return null
+    const d = date || new Date().toLocaleDateString('sv-SE') // YYYY-MM-DD
+    const record = await dbSaveWearLog({
+      id: uid('wear'),
+      date: d,
+      itemIds: [...new Set(itemIds)],
+      note: note || ''
+    })
+    setWearLogs((prev) => [record, ...prev])
+    return record
+  }, [])
+
+  const removeWearLog = useCallback(async (id) => {
+    await dbDeleteWearLog(id)
+    setWearLogs((prev) => prev.filter((x) => x.id !== id))
+  }, [])
+
   // ===== settings =====
   const updateSettings = useCallback(async (s) => {
     const record = await dbSaveSettings(s)
@@ -197,13 +223,14 @@ export function AppProvider({ children }) {
     items: await getAllItems(),
     categories: await getAllCategories(),
     outfits: await getAllOutfits(),
+    wearLogs: await getAllWearLogs(),
     settings: (await getSettings()) || null
   }), [])
 
   // mode: 'merge' 保留现有数据并补充新条目 | 'replace' 清空后写入
   const importSnapshot = useCallback(async (data, mode = 'merge') => {
     if (mode === 'replace') await clearAllData({ keepCategories: false })
-    const stats = { items: 0, categories: 0, outfits: 0 }
+    const stats = { items: 0, categories: 0, outfits: 0, wearLogs: 0 }
     if (Array.isArray(data.categories) && data.categories.length) {
       await putMany('categories', data.categories)
       stats.categories = data.categories.length
@@ -216,6 +243,10 @@ export function AppProvider({ children }) {
       await putMany('outfits', data.outfits)
       stats.outfits = data.outfits.length
     }
+    if (Array.isArray(data.wearLogs) && data.wearLogs.length) {
+      await putMany('wearLogs', data.wearLogs)
+      stats.wearLogs = data.wearLogs.length
+    }
     if (data.settings) await dbSaveSettings(data.settings)
     await loadAll()
     return stats
@@ -226,6 +257,7 @@ export function AppProvider({ children }) {
     setItems([])
     setOutfits([])
     setTrash([])
+    setWearLogs([])
   }, [])
 
   const value = {
@@ -235,6 +267,7 @@ export function AppProvider({ children }) {
     trash,
     categories,
     outfits,
+    wearLogs,
     settings,
     addItem,
     updateItem,
@@ -248,6 +281,8 @@ export function AppProvider({ children }) {
     restore,
     purge,
     emptyTrash,
+    logWear,
+    removeWearLog,
     updateSettings,
     exportSnapshot,
     importSnapshot,

@@ -10,6 +10,7 @@ import WeatherPage from './pages/WeatherPage'
 import ShopPage from './pages/ShopPage'
 import SettingsPage from './pages/SettingsPage'
 import TrashPage from './pages/TrashPage'
+import StatsPage from './pages/StatsPage'
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
         <Route path="weather" element={<WeatherPage />} />
         <Route path="shop" element={<ShopPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="stats" element={<StatsPage />} />
         <Route path="trash" element={<TrashPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
