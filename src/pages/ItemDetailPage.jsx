@@ -85,10 +85,10 @@ export default function ItemDetailPage() {
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs text-slate-400">去商城找同款</p>
             <button
-              onClick={() => navigate(`/shop?q=${encodeURIComponent(item.name)}`)}
-              className="text-xs text-teal-600 font-medium"
+              onClick={() => navigate(`/shop?item=${item.id}`)}
+              className="text-xs text-violet-600 font-medium"
             >
-              ⚖️ 全网比价 →
+              🆚 同款比价 →
             </button>
           </div>
           <div className="grid grid-cols-4 gap-2">

@@ -3,6 +3,9 @@ import { useSearchParams } from 'react-router-dom'
 import TopBar from '../components/TopBar'
 import { SHOPS } from '../utils/constants'
 import { parseProductInput, MANMANBUY } from '../utils/linkParser'
+import { useApp } from '../context/AppContext'
+import { searchByKeyword, searchByImage, isPriceApiConfigured } from '../utils/priceApi'
+import { prepImageForSearch } from '../utils/imagePrep'
 
 const HOT_WORDS = ['连衣裙', 'T恤', '阔腿裤', '防晒衣', '运动鞋', '包包', '牛仔裤', '衬衫', '外套', '半身裙', '西装', '凉鞋']
 
@@ -136,10 +139,10 @@ function ManmanbuyCard({ url, title, subtitle, big }) {
 }
 
 export default function ShopPage() {
+  const { items } = useApp()
   const [searchParams, setSearchParams] = useSearchParams()
   const [mode, setMode] = useState('single')
   const [keyword, setKeyword] = useState('')
-  const [compareKw, setCompareKw] = useState('')
   const [tip, setTip] = useState('')
 
   // 链接比价模式
@@ -147,54 +150,82 @@ export default function ShopPage() {
   const [linkKw, setLinkKw] = useState('')
   const [pasteLock, setPasteLock] = useState(false) // 锁定解析结果,避免边打字边跳变
 
-  // ?q= 预填关键词(衣橱「全网搜同款」入口)
+  // 同页比价模式
+  const [cmpKw, setCmpKw] = useState('')
+  const [cmpLoading, setCmpLoading] = useState(false)
+  const [cmpErr, setCmpErr] = useState('')
+  const [cmpResult, setCmpResult] = useState(null) // {keyword,best,byPlatform,others,...}
+  const [cmpFrom, setCmpFrom] = useState('') // 'image' | 'kw'
+  const [wardrobeOpen, setWardrobeOpen] = useState(false)
+
+  const apiReady = isPriceApiConfigured()
+
+  // ?q= 预填关键词(衣橱「全网比价」入口);?item=<id> 直接对该衣物图搜
   useEffect(() => {
     const q = searchParams.get('q')
+    const itemId = searchParams.get('item')
     if (q) {
       setKeyword(q)
-      setCompareKw(q)
-      setLinkKw(q)
+      setCmpKw(q)
       setMode('single')
       setSearchParams({}, { replace: true })
+    } else if (itemId) {
+      const it = items.find((x) => x.id === itemId)
+      setSearchParams({}, { replace: true })
+      if (it) {
+        setMode('compare')
+        runImageSearch(it.image)
+      }
     }
-  }, [searchParams, setSearchParams])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   const kw = keyword.trim()
-  const compareKeyword = compareKw.trim()
 
   const parsed = pasteLock ? parseProductInput(pasteText) : null
   const linkKeyword = linkKw.trim()
 
-  const openAll = () => {
-    if (!compareKeyword) {
-      setTip('请先输入要比价的商品关键词')
-      setTimeout(() => setTip(''), 2000)
-      return
+  // ---- 同页比价 ----
+  const runKeywordSearch = async (text) => {
+    const t = (text ?? cmpKw).trim()
+    if (!t) return
+    if (!apiReady) { setCmpErr('NOT_CONFIGURED'); return }
+    setCmpLoading(true); setCmpErr(''); setCmpResult(null); setCmpFrom('kw')
+    try {
+      const r = await searchByKeyword(t)
+      setCmpResult(r)
+      if (!r.best?.length && !r.byPlatform?.length) setCmpErr('EMPTY')
+    } catch (e) {
+      setCmpErr(e.message || '比价失败')
+    } finally {
+      setCmpLoading(false)
     }
-    let blockedCount = 0
-    const opened = []
-    for (let i = 0; i < SHOPS.length; i++) {
-      const s = SHOPS[i]
-      const u = s.searchUrl(compareKeyword)
-      try {
-        const w = window.open(u, '_blank', 'noopener,noreferrer')
-        if (!w) {
-          blockedCount++
-        } else {
-          opened.push(s.name)
-        }
-      } catch {
-        blockedCount++
-      }
+  }
+
+  const runImageSearch = async (imageSrc) => {
+    if (!apiReady) { setCmpErr('NOT_CONFIGURED'); setMode('compare'); return }
+    setMode('compare')
+    setCmpLoading(true); setCmpErr(''); setCmpResult(null); setCmpFrom('image')
+    try {
+      const dataUrl = await prepImageForSearch(imageSrc)
+      const r = await searchByImage(dataUrl)
+      setCmpResult(r)
+      if (r.keyword) setCmpKw(r.keyword)
+      if (!r.best?.length && !r.imageItems?.length) setCmpErr('EMPTY')
+    } catch (e) {
+      setCmpErr(e.message || '图片比价失败')
+    } finally {
+      setCmpLoading(false)
     }
-    if (blockedCount > 0) {
-      setTip(`浏览器拦截了 ${blockedCount} 个弹窗(共${SHOPS.length}个),请先在浏览器弹窗权限设置中允许本站,或点击下方各商城卡片右上角 ↗ 按钮逐个打开。已打开:${opened.join('/') || '无'}`)
-    } else if (opened.length === SHOPS.length) {
-      setTip(`已打开 ${opened.join('/')} 的搜索页,请切换浏览器标签对比价格`)
-      setTimeout(() => setTip(''), 3500)
-    } else {
-      setTip(`已打开:${opened.join('/')},请在下方卡片单独打开剩余商城`)
-    }
+  }
+
+  const onUploadImage = (e) => {
+    const f = e.target.files?.[0]
+    if (!f) return
+    const reader = new FileReader()
+    reader.onload = () => runImageSearch(reader.result)
+    reader.readAsDataURL(f)
+    e.target.value = ''
   }
 
   return (
@@ -214,7 +245,7 @@ export default function ShopPage() {
           <button
             onClick={() => setMode('compare')}
             className={`flex-1 h-9 rounded-xl text-sm font-medium transition ${mode === 'compare' ? 'bg-brand-500 text-white shadow' : 'text-slate-600'}`}
-          >⚖️ 比价助手</button>
+          >🆚 同页比价</button>
         </div>
 
         {mode === 'link' && (
@@ -358,31 +389,40 @@ export default function ShopPage() {
         {mode === 'compare' && (
           <>
             <div className="card p-4">
-              <p className="text-sm font-medium text-slate-700 mb-2">⚖️ 同屏多商城比价</p>
+              <p className="text-sm font-medium text-slate-700 mb-1">🆚 同页比价</p>
               <p className="text-xs text-slate-400 mb-3 leading-relaxed">
-                ① 点「一键比价」尝试<strong className="text-brand-600">同时打开 4 个商城</strong>，最方便。<br />
-                ② 若浏览器弹窗被拦（地址栏右侧有「弹窗被拦截」图标），请点下方<strong className="text-rose-500">彩色卡片逐个打开</strong>，每张卡片独立一次点击，不会被拦截。
+                输入关键词或直接用<strong className="text-brand-600">衣橱图片</strong>搜同款,各平台价格在<strong>本页直接对比</strong>,无需开多个商城
               </p>
               <div className="flex gap-2">
                 <input
-                  value={compareKw}
-                  onChange={(e) => setCompareKw(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') openAll() }}
-                  placeholder="输入要比价的商品,如:优衣库T恤"
+                  value={cmpKw}
+                  onChange={(e) => setCmpKw(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') runKeywordSearch() }}
+                  placeholder="输入商品关键词,如:优衣库白色T恤"
                   className="flex-1 h-10 px-3 rounded-xl bg-slate-100 text-sm outline-none focus:bg-slate-200"
                 />
                 <button
-                  onClick={openAll}
-                  className="h-10 px-5 rounded-xl bg-gradient-to-r from-brand-500 to-violet-500 text-white text-sm font-medium shadow active:scale-95 whitespace-nowrap"
-                >一键比价</button>
+                  onClick={() => runKeywordSearch()}
+                  disabled={cmpLoading}
+                  className="h-10 px-5 rounded-xl bg-gradient-to-r from-brand-500 to-violet-500 text-white text-sm font-medium shadow active:scale-95 whitespace-nowrap disabled:opacity-50"
+                >{cmpLoading ? '比价中…' : '搜价格'}</button>
               </div>
-              <div className="mt-3">
-                <p className="text-xs text-slate-400 mb-2">热门词(点一下即用)</p>
+              <div className="flex gap-2 mt-2.5">
+                <button
+                  onClick={() => { if (items.length) setWardrobeOpen(true); else setTip('衣橱是空的,先去添加衣物') }}
+                  className="flex-1 h-9 rounded-xl bg-slate-100 text-slate-600 text-xs font-medium active:bg-slate-200"
+                >📷 用衣橱图片搜同款</button>
+                <label className="flex-1 h-9 rounded-xl bg-slate-100 text-slate-600 text-xs font-medium active:bg-slate-200 flex items-center justify-center cursor-pointer">
+                  📤 上传图片搜索
+                  <input type="file" accept="image/*" className="hidden" onChange={onUploadImage} />
+                </label>
+              </div>
+              <div className="mt-2.5">
                 <div className="flex gap-2 flex-wrap">
                   {HOT_WORDS.slice(0, 6).map((w) => (
                     <button
                       key={w}
-                      onClick={() => setCompareKw(w)}
+                      onClick={() => { setCmpKw(w); runKeywordSearch(w) }}
                       className="chip bg-slate-100 text-slate-600 active:bg-brand-100 active:text-brand-600"
                     >{w}</button>
                   ))}
@@ -393,53 +433,171 @@ export default function ShopPage() {
               )}
             </div>
 
-            <div className="space-y-2">
-              {compareKeyword ? (
-                <>
-                  <p className="text-xs text-slate-500 px-1">
-                    <span className="text-rose-500 font-semibold">② 逐个打开兜底</span>（批量被拦时点这里）：每次点击都是独立手势，不会被拦截
-                  </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    {SHOPS.map((s) => (
-                      <ShopCard key={s.id} shop={s} kw={compareKeyword} />
-                    ))}
+            {/* 未配置后端 */}
+            {!apiReady && !cmpLoading && (
+              <div className="card p-4 text-xs text-slate-500 leading-relaxed">
+                <p className="text-slate-700 font-medium mb-1">⚙️ 同页比价需要部署比价后端</p>
+                按仓库内 <code className="bg-slate-100 px-1 rounded">workers/price-api/README.md</code> 的步骤:申请好单库/大淘客密钥(个人免费)→ 部署 Cloudflare Worker → 在前端 <code className="bg-slate-100 px-1 rounded">.env</code> 配置 <code className="bg-slate-100 px-1 rounded">VITE_PRICE_API</code>。<br />
+                <span className="text-slate-400">未部署前,可用下方「链接比价」模式(跳慢慢买看全网价格)。</span>
+              </div>
+            )}
+
+            {/* 加载中 */}
+            {cmpLoading && (
+              <div className="card p-6 text-center">
+                <div className="w-10 h-10 mx-auto rounded-full bg-gradient-to-br from-brand-400 to-violet-500 animate-pulse flex items-center justify-center text-white text-lg">🔍</div>
+                <p className="text-sm text-slate-600 mt-3 font-medium">{cmpFrom === 'image' ? '正在识别图片并全网比价…' : '正在各平台查询价格…'}</p>
+                <p className="text-xs text-slate-400 mt-1">好单库 + 大淘客,首次约需 2~5 秒</p>
+              </div>
+            )}
+
+            {/* 错误/空结果 */}
+            {!cmpLoading && cmpErr && (
+              <div className="card p-4 text-xs leading-relaxed">
+                {cmpErr === 'NOT_CONFIGURED' ? (
+                  <p className="text-slate-500">未配置比价后端(VITE_PRICE_API),请先按 workers/price-api/README.md 部署。</p>
+                ) : cmpErr === 'EMPTY' ? (
+                  <div>
+                    <p className="text-slate-600 mb-1">😮 没搜到同款——淘客数据只覆盖有佣金的推广商品,小众款式可能搜不到。</p>
+                    <p className="text-slate-400">可以换个更通用的关键词(如「白色T恤」),或{' '}
+                      <a className="text-teal-600 underline" href={MANMANBUY.searchUrl(cmpKw || '连衣裙')} target="_blank" rel="noopener noreferrer">去慢慢买搜全网报价 ↗</a>
+                    </p>
                   </div>
-                  <div className="card p-3 mt-2">
-                    <p className="text-xs text-slate-500 mb-2">🚀 一行快捷(点击一个开一个)</p>
+                ) : (
+                  <p className="text-rose-500">比价失败:{cmpErr}</p>
+                )}
+              </div>
+            )}
+
+            {/* 结果:各平台最低价 + 同款列表 */}
+            {cmpResult && !cmpLoading && (
+              <>
+                <div className="card p-4">
+                  <p className="text-sm font-medium text-slate-700 mb-0.5">💰 各平台最低价</p>
+                  <p className="text-[10px] text-slate-400 mb-2.5">
+                    {cmpFrom === 'image' && '📷 图片识别: '}
+                    「{cmpResult.keyword || cmpResult.recognizedTitle || cmpKw}」 · 共 {cmpResult.total || 0} 条结果 · 价格以平台页面为准
+                  </p>
+                  {(cmpResult.byPlatform || []).length > 0 ? (
                     <div className="flex gap-2 flex-wrap">
-                      {SHOPS.map((s) => (
+                      {cmpResult.byPlatform.map((x, i) => (
                         <a
-                          key={s.id}
-                          href={s.searchUrl(compareKeyword)}
+                          key={x.platformId + i}
+                          href={x.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className={`h-9 px-3 rounded-xl text-white text-xs font-medium flex items-center gap-1 active:scale-95 shadow-sm`}
-                          style={{ background: s.id === 'taobao' ? 'linear-gradient(135deg,#f97316,#fb923c)' : s.id === 'pdd' ? 'linear-gradient(135deg,#ef4444,#f43f5e)' : s.id === 'douyin' ? 'linear-gradient(135deg,#334155,#0f172a)' : 'linear-gradient(135deg,#ef4444,#e11d48)' }}
+                          className={`px-3 py-2 rounded-xl text-white flex flex-col items-start active:scale-95 transition shadow-sm ${
+                            i === 0 ? 'ring-2 ring-amber-300' : ''
+                          }`}
+                          style={{
+                            background:
+                              x.platformId === 'taobao' || x.platformId === 'tmall' ? 'linear-gradient(135deg,#f97316,#fb923c)'
+                              : x.platformId === 'pdd' ? 'linear-gradient(135deg,#ef4444,#f43f5e)'
+                              : x.platformId === 'jd' ? 'linear-gradient(135deg,#ef4444,#e11d48)'
+                              : x.platformId === 'douyin' ? 'linear-gradient(135deg,#334155,#0f172a)'
+                              : 'linear-gradient(135deg,#0d9488,#14b8a6)'
+                          }}
                         >
-                          <span>{s.icon}</span><span>{s.name}</span><span>↗</span>
+                          <span className="text-[10px] text-white/85">{x.platform} {i === 0 && '· 最低'}</span>
+                          <span className="text-sm font-bold">¥{x.price}</span>
                         </a>
                       ))}
-                      <a
-                        href={MANMANBUY.searchUrl(compareKeyword)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="h-9 px-3 rounded-xl text-white text-xs font-medium flex items-center gap-1 active:scale-95 shadow-sm"
-                        style={{ background: 'linear-gradient(135deg,#0d9488,#14b8a6)' }}
-                      >
-                        <span>📊</span><span>慢慢买</span><span>↗</span>
-                      </a>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400">暂无汇总数据</p>
+                  )}
+                </div>
+
+                {(cmpResult.best || []).length > 0 && (
+                  <div className="card p-4">
+                    <p className="text-sm font-medium text-slate-700 mb-2.5">🛒 同款候选(按价格从低到高)</p>
+                    <div className="space-y-2">
+                      {cmpResult.best.map((g, i) => (
+                        <a
+                          key={g.url + i}
+                          href={g.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2.5 p-2 rounded-xl border border-slate-100 active:bg-slate-50 transition"
+                        >
+                          <div className="w-14 h-14 rounded-lg bg-white border border-slate-100 overflow-hidden flex items-center justify-center shrink-0">
+                            {g.image ? <img src={g.image} alt={g.title} className="max-w-full max-h-full object-contain p-0.5" loading="lazy" /> : <span className="text-slate-300 text-xs">无图</span>}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-slate-700 line-clamp-2 leading-snug">{g.title}</p>
+                            <div className="flex gap-1 mt-1 flex-wrap">
+                              <span className="chip bg-slate-100 text-slate-500">{g.platform}</span>
+                              {g.shop && <span className="chip bg-slate-50 text-slate-400 border border-slate-100">{g.shop}</span>}
+                              {g.sales > 0 && <span className="chip bg-slate-50 text-slate-400 border border-slate-100">月售{g.sales >= 10000 ? `${(g.sales / 10000).toFixed(1)}万` : g.sales}</span>}
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            {g.originPrice > g.price && <p className="text-[10px] text-slate-400 line-through">¥{g.originPrice}</p>}
+                            <p className={`text-sm font-bold ${i === 0 ? 'text-rose-500' : 'text-slate-800'}`}>¥{g.price}</p>
+                            {i === 0 && <p className="text-[9px] text-amber-500 font-bold">全网最低</p>}
+                          </div>
+                        </a>
+                      ))}
                     </div>
                   </div>
-                </>
-              ) : (
-                <div className="card p-5 text-center text-slate-400 text-xs">
-                  👆 先在上方输入要比价的商品关键词（如「连衣裙」），立即出现 4 个商城入口
-                </div>
-              )}
-            </div>
+                )}
+
+                {(cmpResult.others || []).length > 0 && (
+                  <details className="card p-4">
+                    <summary className="text-xs text-slate-500 cursor-pointer select-none">相似款 {cmpResult.others.length} 条(点开查看)</summary>
+                    <div className="space-y-2 mt-2.5">
+                      {cmpResult.others.map((g, i) => (
+                        <a
+                          key={g.url + i}
+                          href={g.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2.5 p-2 rounded-xl border border-slate-100 active:bg-slate-50"
+                        >
+                          <div className="w-12 h-12 rounded-lg bg-white border border-slate-100 overflow-hidden flex items-center justify-center shrink-0">
+                            {g.image && <img src={g.image} alt={g.title} className="max-w-full max-h-full object-contain p-0.5" loading="lazy" />}
+                          </div>
+                          <p className="flex-1 min-w-0 text-xs text-slate-500 line-clamp-1">{g.title}</p>
+                          <p className="text-xs font-medium text-slate-700 shrink-0">¥{g.price}</p>
+                        </a>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </>
+            )}
           </>
         )}
       </div>
+
+      {/* 衣橱选图:图搜同款 */}
+      {wardrobeOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setWardrobeOpen(false)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl p-5 max-h-[75vh] overflow-y-auto page-enter" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-semibold text-slate-900 mb-1">选一件衣物搜同款</h3>
+            <p className="text-xs text-slate-400 mb-3">用衣橱里的衣物图片,自动识别并对比各平台价格(图片会自动合成白底以提升识别率)</p>
+            {items.length === 0 ? (
+              <p className="text-xs text-slate-400 text-center py-6">衣橱是空的,先去添加衣物</p>
+            ) : (
+              <div className="grid grid-cols-4 gap-2">
+                {items.map((it) => (
+                  <button
+                    key={it.id}
+                    onClick={() => { setWardrobeOpen(false); runImageSearch(it.image) }}
+                    className="rounded-xl overflow-hidden border border-slate-100 bg-slate-50 active:scale-95 transition"
+                  >
+                    <div className="aspect-square flex items-center justify-center checkerboard">
+                      <img src={it.image} alt={it.name} className="max-w-full max-h-full object-contain p-1" />
+                    </div>
+                    <p className="text-[10px] text-slate-500 truncate px-1 py-0.5 bg-white">{it.name}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="h-6" />
     </div>

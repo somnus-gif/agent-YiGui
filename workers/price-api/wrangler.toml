@@ -1,0 +1,14 @@
+name = "agent-yigui-price-api"
+main = "src/index.js"
+compatibility_date = "2026-10-21"
+
+# 部署后把下面的值替换为真实凭证(不要用 wrangler.toml 提交密钥,生产请用 wrangler secret put)
+[vars]
+# 好单库 apikey:开放平台 - 我的应用获取(个人可免费注册)
+HDK_APIKEY = ""
+# 大淘客:开放平台创建应用后获取(图搜与补充商品源)
+DTK_APPKEY = ""
+DTK_SECRET = ""
+
+[[observability]]
+enabled = false
