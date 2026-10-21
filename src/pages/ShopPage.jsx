@@ -7,6 +7,7 @@ import { useApp } from '../context/AppContext'
 import { searchByKeyword, searchByImage, isPriceApiConfigured, priceMode, PLATFORM_GUIDE } from '../utils/priceApi'
 import { prepImageForSearch } from '../utils/imagePrep'
 import EmbedCompare from '../components/EmbedCompare'
+import ImageKeywordPicker from '../components/ImageKeywordPicker'
 
 const HOT_WORDS = ['连衣裙', 'T恤', '阔腿裤', '防晒衣', '运动鞋', '包包', '牛仔裤', '衬衫', '外套', '半身裙', '西装', '凉鞋']
 
@@ -158,6 +159,9 @@ export default function ShopPage() {
   const [cmpResult, setCmpResult] = useState(null) // {keyword,best,byPlatform,others,...}
   const [cmpFrom, setCmpFrom] = useState('') // 'image' | 'kw'
   const [wardrobeOpen, setWardrobeOpen] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerSrc, setPickerSrc] = useState('')
+  const [pickerItem, setPickerItem] = useState(null)
 
   const apiReady = isPriceApiConfigured()
 
@@ -175,7 +179,7 @@ export default function ShopPage() {
       setSearchParams({}, { replace: true })
       if (it) {
         setMode('compare')
-        runImageSearch(it.image)
+        runImageSearch(it.image, it)
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -187,11 +191,16 @@ export default function ShopPage() {
   const linkKeyword = linkKw.trim()
 
   // ---- 同页比价 ----
-  const runKeywordSearch = async (text) => {
+  const runKeywordSearch = async (text, from = 'kw') => {
     const t = (text ?? cmpKw).trim()
     if (!t) return
-    if (!apiReady) { setCmpErr('NOT_CONFIGURED'); return }
-    setCmpLoading(true); setCmpErr(''); setCmpResult(null); setCmpFrom('kw')
+    setCmpKw(t)
+    if (!apiReady) {
+      // 没配数据源也要保留关键词 → 下方的免授权内嵌比价仍可用
+      setCmpErr('NOT_CONFIGURED'); setCmpResult(null); setCmpFrom(from)
+      return
+    }
+    setCmpLoading(true); setCmpErr(''); setCmpResult(null); setCmpFrom(from)
     try {
       const r = await searchByKeyword(t)
       setCmpResult(r)
@@ -203,28 +212,38 @@ export default function ShopPage() {
     }
   }
 
-  const runImageSearch = async (imageSrc) => {
-    if (!apiReady) { setCmpErr('NOT_CONFIGURED'); setMode('compare'); return }
-    if (priceMode !== 'worker') {
-      // 图搜依赖大淘客 AppSecret,不能放前端 → 直连模式下引导改用关键词
-      setMode('compare')
-      setCmpErr('IMAGE_NEEDS_BACKEND')
-      setCmpLoading(false)
+  /**
+   * 图片比价:
+   *  - Worker 模式 → 大淘客图搜(真正的以图搜图)
+   *  - 直连 / 未配置 → 本地提取主色 + 品类点选,拼成关键词再比价(零依赖)
+   */
+  const runImageSearch = async (imageSrc, item = null) => {
+    setMode('compare')
+    setCmpErr('')
+    if (priceMode === 'worker' && apiReady) {
+      setCmpLoading(true); setCmpResult(null); setCmpFrom('image')
+      try {
+        const dataUrl = await prepImageForSearch(imageSrc)
+        const r = await searchByImage(dataUrl)
+        setCmpResult(r)
+        if (r.keyword) setCmpKw(r.keyword)
+        if (!r.best?.length && !r.imageItems?.length) setCmpErr('EMPTY')
+      } catch (e) {
+        setCmpErr(e.message || '图片比价失败')
+      } finally {
+        setCmpLoading(false)
+      }
       return
     }
-    setMode('compare')
-    setCmpLoading(true); setCmpErr(''); setCmpResult(null); setCmpFrom('image')
-    try {
-      const dataUrl = await prepImageForSearch(imageSrc)
-      const r = await searchByImage(dataUrl)
-      setCmpResult(r)
-      if (r.keyword) setCmpKw(r.keyword)
-      if (!r.best?.length && !r.imageItems?.length) setCmpErr('EMPTY')
-    } catch (e) {
-      setCmpErr(e.message || '图片比价失败')
-    } finally {
-      setCmpLoading(false)
-    }
+    // 本地分析路线
+    setPickerSrc(imageSrc)
+    setPickerItem(item)
+    setPickerOpen(true)
+  }
+
+  const onPickerConfirm = (kw) => {
+    setPickerOpen(false)
+    runKeywordSearch(kw, 'image')
   }
 
   const onUploadImage = (e) => {
@@ -617,6 +636,16 @@ export default function ShopPage() {
         )}
       </div>
 
+      {/* 图片比价:确认搜索词 */}
+      {pickerOpen && (
+        <ImageKeywordPicker
+          imageSrc={pickerSrc}
+          item={pickerItem}
+          onConfirm={onPickerConfirm}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+
       {/* 衣橱选图:图搜同款 */}
       {wardrobeOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setWardrobeOpen(false)}>
@@ -631,7 +660,7 @@ export default function ShopPage() {
                 {items.map((it) => (
                   <button
                     key={it.id}
-                    onClick={() => { setWardrobeOpen(false); runImageSearch(it.image) }}
+                    onClick={() => { setWardrobeOpen(false); runImageSearch(it.image, it) }}
                     className="rounded-xl overflow-hidden border border-slate-100 bg-slate-50 active:scale-95 transition"
                   >
                     <div className="aspect-square flex items-center justify-center checkerboard">
