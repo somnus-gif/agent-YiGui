@@ -6,6 +6,7 @@ import { parseProductInput, MANMANBUY } from '../utils/linkParser'
 import { useApp } from '../context/AppContext'
 import { searchByKeyword, searchByImage, isPriceApiConfigured, priceMode, PLATFORM_GUIDE } from '../utils/priceApi'
 import { prepImageForSearch } from '../utils/imagePrep'
+import EmbedCompare from '../components/EmbedCompare'
 
 const HOT_WORDS = ['连衣裙', 'T恤', '阔腿裤', '防晒衣', '运动鞋', '包包', '牛仔裤', '衬衫', '外套', '半身裙', '西装', '凉鞋']
 
@@ -606,6 +607,11 @@ export default function ShopPage() {
                   </details>
                 )}
               </>
+            )}
+
+            {/* 免授权兜底:内嵌慢慢买,一页看全网价格 */}
+            {!cmpLoading && (cmpResult?.keyword || cmpKw) && (
+              <EmbedCompare keyword={cmpResult?.keyword || cmpKw} />
             )}
           </>
         )}
