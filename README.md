@@ -41,8 +41,37 @@ AI 模型（isnet_quint8，约 43MB）与 onnxruntime WASM **已内置在 `publi
 - **搭配**：挑选衣物组合成套装，标注季节与场合
 - **天气穿搭**：Open-Meteo 免费 API（无需 Key），按体感温度给穿衣建议 + 7 天预报
 - **今日穿搭推荐**：结合体感温度/季节/风格，从衣橱自动生成 3 套今日 OOTD（含套装方案），附推荐理由与衣橱缺口提示，一键保存为搭配
-- **商城比价**：三种模式——单商城搜索 / 链接比价（粘贴商品链接→慢慢买 180 天价格走势）/ **同页比价**（关键词或衣橱图片搜同款，淘宝/天猫/京东/拼多多/抖音价格同页对比、最低价高亮，数据来自自部署的 Cloudflare Worker 聚合好单库+大淘客，见 `workers/price-api/`）；衣物详情页可「同款比价」
+- **商城比价**：三种模式——单商城搜索 / 链接比价（粘贴商品链接→慢慢买 180 天价格走势）/ **同页比价**（关键词或衣橱图片搜同款，淘宝/天猫/京东/拼多多/抖音价格同页对比、最低价高亮）；衣物详情页可「同款比价」
 - **统计与穿衣日历**：「今天穿了什么」月历记录（保存 OOTD 自动打卡），衣橱利用率、本月穿着天数/件次、最常穿 TOP5、分类穿着率、从未穿着清单
+
+### 同页比价：两种运行模式
+
+代码里有 **两种模式**，由环境变量自动切换，业务代码无感知：
+
+| 模式 | 触发条件 | 关键词比价 | 图片搜同款 | 需要部署后端 |
+| --- | --- | --- | --- | --- |
+| 🟢 **直连模式**（默认推荐） | 只配 `VITE_HDK_APIKEY` | ✅ | ❌ | 不需要 |
+| 🔵 **Worker 模式** | 配了 `VITE_PRICE_API` | ✅ | ✅ | 需要 |
+
+切换逻辑在 `src/utils/priceApi.js`：
+
+```js
+export const priceMode = BASE ? 'worker' : (HDK_KEY ? 'direct' : 'none')
+```
+
+**直连模式**下，浏览器直接请求好单库 `v2.api.haodanku.com`（该接口返回 `Access-Control-Allow-Origin: *`，支持 HTTPS 与跨域，因此**不需要自建后端**），聚合淘宝/天猫、拼多多、京东、抖音的联盟商品数据，在页面内完成归一化、同款过滤、按平台取最低价与统一升序排序。
+
+```bash
+# .env
+VITE_HDK_APIKEY=你的好单库apikey   # 必填，放在好单库后台「API对接」页
+VITE_PRICE_API=                    # 留空即走直连模式
+```
+
+> ⚠️ `.env` 已在 `.gitignore` 中，不要提交。改完 `.env` 需重启 dev server（`VITE_` 变量在启动时注入）。
+
+**Worker 模式**额外提供**图片搜同款**（大淘客 `goods/search-by-image`），因为大淘客接口要求 AppSecret 签名、不能暴露在前端。部署方式见 `workers/price-api/README.md`。
+
+**平台授权说明**：好单库免费 Key 默认只开通淘宝/天猫。拼多多、京东、抖音需要在好单库后台分别绑定「多多进宝」「京东联盟」「抖音」推广账号后才返回数据；未开通的平台会在结果页显示琥珀色提示，不影响其他平台正常出价。
 
 ### 数据安全
 
@@ -76,10 +105,16 @@ src/
 │  ├─ backup.js            备份导出/导入解析
 │  ├─ weather.js           天气 API 与穿衣建议
 │  ├─ outfitRecommender.js 今日穿搭推荐引擎(温度分层/季节过滤/风格一致/缺口分析)
-│  └─ linkParser.js        商品链接平台识别 + 慢慢买比价 URL 构造
+│  ├─ linkParser.js        商品链接平台识别 + 慢慢买比价 URL 构造
+│  ├─ priceApi.js          比价 API 封装(直连/Worker 双模式自动切换)
+│  ├─ imagePrep.js         衣橱图转 JPEG(透明底补白 + 缩放压缩)
 │  └─ constants.js         分类/季节/风格/商城配置
 ├─ db/database.js          IndexedDB 数据层(含内存降级)
 └─ context/AppContext.jsx  全局状态
+shared/                    浏览器与 Worker 共用的比价逻辑
+├─ haodankuClient.js       好单库 API 客户端(淘宝/拼多多/京东/抖音)
+└─ priceNormalize.js       价格归一化 + 同款相似度/关键词覆盖度排序
+workers/price-api/         可选：Cloudflare Worker 后端(仅图片搜同款需要)
 ```
 
 ## 说明

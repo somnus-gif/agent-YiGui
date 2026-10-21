@@ -4,7 +4,7 @@ import TopBar from '../components/TopBar'
 import { SHOPS } from '../utils/constants'
 import { parseProductInput, MANMANBUY } from '../utils/linkParser'
 import { useApp } from '../context/AppContext'
-import { searchByKeyword, searchByImage, isPriceApiConfigured } from '../utils/priceApi'
+import { searchByKeyword, searchByImage, isPriceApiConfigured, priceMode, PLATFORM_GUIDE } from '../utils/priceApi'
 import { prepImageForSearch } from '../utils/imagePrep'
 
 const HOT_WORDS = ['连衣裙', 'T恤', '阔腿裤', '防晒衣', '运动鞋', '包包', '牛仔裤', '衬衫', '外套', '半身裙', '西装', '凉鞋']
@@ -204,6 +204,13 @@ export default function ShopPage() {
 
   const runImageSearch = async (imageSrc) => {
     if (!apiReady) { setCmpErr('NOT_CONFIGURED'); setMode('compare'); return }
+    if (priceMode !== 'worker') {
+      // 图搜依赖大淘客 AppSecret,不能放前端 → 直连模式下引导改用关键词
+      setMode('compare')
+      setCmpErr('IMAGE_NEEDS_BACKEND')
+      setCmpLoading(false)
+      return
+    }
     setMode('compare')
     setCmpLoading(true); setCmpErr(''); setCmpResult(null); setCmpFrom('image')
     try {
@@ -455,7 +462,12 @@ export default function ShopPage() {
             {!cmpLoading && cmpErr && (
               <div className="card p-4 text-xs leading-relaxed">
                 {cmpErr === 'NOT_CONFIGURED' ? (
-                  <p className="text-slate-500">未配置比价后端(VITE_PRICE_API),请先按 workers/price-api/README.md 部署。</p>
+                  <p className="text-slate-500">未配置比价数据源:在 <code className="bg-slate-100 px-1 rounded">.env</code> 填 <code className="bg-slate-100 px-1 rounded">VITE_HDK_APIKEY</code>(直连好单库)或 <code className="bg-slate-100 px-1 rounded">VITE_PRICE_API</code>(Worker 后端)。</p>
+                ) : cmpErr === 'IMAGE_NEEDS_BACKEND' ? (
+                  <div>
+                    <p className="text-slate-600 mb-1">图片比价需要部署后端(图搜凭证不能放前端)。</p>
+                    <p className="text-slate-400">当前可先输入关键词比价;要解锁图搜,按 <code className="bg-slate-100 px-1 rounded">workers/price-api/README.md</code> 部署 Worker 后配置 VITE_PRICE_API。</p>
+                  </div>
                 ) : cmpErr === 'EMPTY' ? (
                   <div>
                     <p className="text-slate-600 mb-1">😮 没搜到同款——淘客数据只覆盖有佣金的推广商品,小众款式可能搜不到。</p>
@@ -478,6 +490,34 @@ export default function ShopPage() {
                     {cmpFrom === 'image' && '📷 图片识别: '}
                     「{cmpResult.keyword || cmpResult.recognizedTitle || cmpKw}」 · 共 {cmpResult.total || 0} 条结果 · 价格以平台页面为准
                   </p>
+                  {(cmpResult.failed || []).length > 0 && (
+                    <div className="mb-2.5 px-2.5 py-2 rounded-lg bg-amber-50 text-amber-700 text-[10px] leading-snug space-y-1">
+                      {cmpResult.failed.map((f, i) => {
+                        const g =
+                          Object.values(PLATFORM_GUIDE).find((x) => x.name === f.name) ||
+                          Object.values(PLATFORM_GUIDE).find((x) => x.name.startsWith(f.name))
+                        return (
+                          <p key={i}>
+                            ⚠️ <b>{f.name}</b>:{g?.tip || f.message}
+                            {g?.fix && (
+                              <>
+                                {' '}
+                                <a
+                                  className="underline text-teal-700"
+                                  href={g.fix}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  去授权 ↗
+                                </a>
+                              </>
+                            )}
+                          </p>
+                        )
+                      })}
+                      <p className="text-amber-600/70">1688:{PLATFORM_GUIDE[1688].tip}</p>
+                    </div>
+                  )}
                   {(cmpResult.byPlatform || []).length > 0 ? (
                     <div className="flex gap-2 flex-wrap">
                       {cmpResult.byPlatform.map((x, i) => (
@@ -527,6 +567,7 @@ export default function ShopPage() {
                             <p className="text-xs text-slate-700 line-clamp-2 leading-snug">{g.title}</p>
                             <div className="flex gap-1 mt-1 flex-wrap">
                               <span className="chip bg-slate-100 text-slate-500">{g.platform}</span>
+                              {g.approx && <span className="chip bg-amber-50 text-amber-600 border border-amber-100">榜单参考</span>}
                               {g.shop && <span className="chip bg-slate-50 text-slate-400 border border-slate-100">{g.shop}</span>}
                               {g.sales > 0 && <span className="chip bg-slate-50 text-slate-400 border border-slate-100">月售{g.sales >= 10000 ? `${(g.sales / 10000).toFixed(1)}万` : g.sales}</span>}
                             </div>

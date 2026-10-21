@@ -9,7 +9,7 @@
 
 import * as hdk from './providers/haodanku.js'
 import * as dtk from './providers/dataoke.js'
-import { normalize, rankByRelevance, summarizeByPlatform, toKeyword } from './normalize.js'
+import { normalize, buildResponse, toKeyword } from './normalize.js'
 
 const CACHE_TTL = 600 // 10 分钟
 
@@ -48,22 +48,25 @@ async function withCache(request, fn) {
 async function handleSearch(kw, env) {
   if (!kw) return json({ error: '缺少关键词 kw' }, 400)
   const jobs = []
-  if (env.HDK_APIKEY) jobs.push(hdk.searchAll(env.HDK_APIKEY, kw).catch(() => []))
+  const failed = []
+  if (env.HDK_APIKEY) {
+    jobs.push(
+      hdk.searchAll(env.HDK_APIKEY, kw).catch((e) => ({ items: [], failed: [{ name: '好单库', message: e?.message }] }))
+    )
+  }
   if (env.DTK_APPKEY && env.DTK_SECRET) {
     jobs.push(dtk.searchGoods(env.DTK_APPKEY, env.DTK_SECRET, kw).catch(() => []))
   }
-  const lists = await Promise.all(jobs)
-  const all = normalize(lists.flat())
-  const { best, others } = rankByRelevance(all, kw)
-  return {
-    keyword: kw,
-    total: all.length,
-    byPlatform: summarizeByPlatform(best.length ? best : all),
-    best,
-    others,
-    platforms: [...new Set(all.map((x) => x.platform))],
-    updatedAt: Date.now()
+  const settled = await Promise.all(jobs)
+  const items = []
+  for (const s of settled) {
+    if (Array.isArray(s)) items.push(...s)
+    else {
+      items.push(...(s.items || []))
+      failed.push(...(s.failed || []))
+    }
   }
+  return buildResponse(items, kw, { failed })
 }
 
 async function handleImageSearch(imageBase64, env) {
